@@ -12,9 +12,25 @@ pub const AsciiWriter = struct {
         return 1;
     }
 
-    pub fn render(self: *AsciiWriter, data: [][]const []const u8) []const u8 {
-        _ = self;
+    pub fn render(self: *AsciiWriter, data: [][]const []const u8) ![]const u8 {
+        // find max_width per_column
+        var cols_widths = std.AutoHashMap(usize, usize).init(self.allocator);
+        defer cols_widths.deinit();
+
         for (data) |row| {
+            for (row, 0..) |col, i| {
+                var max_width = try cols_widths.getOrPut(i);
+                if (!max_width.found_existing) {
+                    max_width.value_ptr.* = 0;
+                }
+                if (col.len > max_width.value_ptr.*) {
+                    max_width.value_ptr.* = col.len;
+                }
+            }
+        }
+
+        for (data) |row| {
+            std.debug.print("------------------\n", .{});
             for (row) |col| {
                 std.debug.print("{s}\n", .{col});
             }
@@ -50,8 +66,9 @@ test "render" {
 
     var v = [_][]const u8{ "Hello", "World" };
     try rows.append(&v);
-    v = [_][]const u8{ "Hello", "World2" };
+    v = [_][]const u8{ "Hello", "Worldddddddd" };
     try rows.append(&v);
 
-    try testing.expectEqualStrings(app.render(rows.items), "ok");
+    const result = try app.render(rows.items);
+    try testing.expectEqualStrings(result, "ok");
 }
