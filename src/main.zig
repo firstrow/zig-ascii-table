@@ -2,8 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
-const String = []const u8;
-
 pub const AsciiWriter = struct {
     allocator: Allocator,
 
