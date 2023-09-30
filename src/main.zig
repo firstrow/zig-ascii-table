@@ -5,15 +5,24 @@ const testing = std.testing;
 pub const AsciiWriter = struct {
     allocator: Allocator,
 
-    pub fn one(self: *AsciiWriter) u8 {
-        _ = self;
-        return 1;
-    }
-
     pub fn render(self: *AsciiWriter, data: [][]const []const u8) ![]const u8 {
         // find max_width per_column
+        var widths = try self.make_columns_widths(data);
+        defer widths.deinit();
+
+
+        for (data) |row| {
+            std.debug.print("------------------\n", .{});
+            for (row) |col| {
+                std.debug.print("{s}\n", .{col});
+            }
+        }
+        return "ok";
+    }
+
+    /// find max width per column
+    fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !std.AutoHashMap(usize, usize) {
         var cols_widths = std.AutoHashMap(usize, usize).init(self.allocator);
-        defer cols_widths.deinit();
 
         for (data) |row| {
             for (row, 0..) |col, i| {
@@ -27,13 +36,7 @@ pub const AsciiWriter = struct {
             }
         }
 
-        for (data) |row| {
-            std.debug.print("------------------\n", .{});
-            for (row) |col| {
-                std.debug.print("{s}\n", .{col});
-            }
-        }
-        return "ok";
+        return cols_widths;
     }
 
     pub fn deinit(self: *AsciiWriter) void {
@@ -49,12 +52,6 @@ pub fn init(allocator: Allocator) !*AsciiWriter {
     return self;
 }
 
-test "init works" {
-    var app = try init(std.testing.allocator);
-    defer app.deinit();
-    try testing.expect(app.one() == 1);
-}
-
 test "render" {
     var app = try init(std.testing.allocator);
     defer app.deinit();
@@ -66,7 +63,7 @@ test "render" {
     try rows.append(&v);
     v = [_][]const u8{ "Hello", "Worldddddddd" };
     try rows.append(&v);
-
     const result = try app.render(rows.items);
+
     try testing.expectEqualStrings(result, "ok");
 }
