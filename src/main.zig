@@ -77,7 +77,7 @@ test "render" {
 
     var v = [_][]const u8{ "Hello", "World" };
     try rows.append(&v);
-    v = [_][]const u8{ "Hello", "Worldddddddd" };
+    v = [_][]const u8{ "Hello", "Zig" };
     try rows.append(&v);
     const result = try app.render(rows.items);
 
