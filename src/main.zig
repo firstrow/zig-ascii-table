@@ -10,17 +10,17 @@ pub const AsciiWriter = struct {
         var widths = try self.make_columns_widths(data);
         defer widths.deinit();
 
-
         for (data) |row| {
-            std.debug.print("------------------\n", .{});
             for (row) |col| {
-                std.debug.print("{s}\n", .{col});
+                std.debug.print("{s} |", .{col});
             }
+            std.debug.print("\n", .{});
         }
         return "ok";
     }
 
     /// find max width per column
+    /// TODO: use fixed width array
     fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !std.AutoHashMap(usize, usize) {
         var cols_widths = std.AutoHashMap(usize, usize).init(self.allocator);
 
@@ -37,6 +37,22 @@ pub const AsciiWriter = struct {
         }
 
         return cols_widths;
+    }
+
+    pub fn right_pad(self: *AsciiWriter, str: []const u8, width: usize) ![]u8 {
+        if (str.len >= width) {
+            return self.allocator.dupe(u8, str);
+        }
+
+        const buf = try self.allocator.alloc(u8, width);
+        std.mem.copy(u8, buf, str);
+
+        var i: usize = width;
+        while (i > str.len) : (i -= 1) {
+            buf[i - 1] = '_';
+        }
+
+        return buf;
     }
 
     pub fn deinit(self: *AsciiWriter) void {
@@ -66,4 +82,19 @@ test "render" {
     const result = try app.render(rows.items);
 
     try testing.expectEqualStrings(result, "ok");
+}
+
+test "right pad" {
+    var app = try init(std.testing.allocator);
+    defer app.deinit();
+
+    var msg = "hello";
+    var r = try app.right_pad(msg, 8);
+    try testing.expectEqualStrings("hello___", r);
+    app.allocator.free(r);
+
+    msg = "hello";
+    r = try app.right_pad(msg, 4);
+    try testing.expectEqualStrings("hello", r);
+    app.allocator.free(r);
 }
