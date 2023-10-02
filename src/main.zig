@@ -81,7 +81,12 @@ test "render" {
     try rows.append(&v);
     const result = try app.render(rows.items);
 
-    try testing.expectEqualStrings(result, "ok");
+    const expected =
+        \\| Hello | World |
+        \\| Hello | Zig   |
+    ;
+
+    try testing.expectEqualStrings(result, expected);
 }
 
 test "right pad" {
