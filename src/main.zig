@@ -6,23 +6,33 @@ pub const AsciiWriter = struct {
     allocator: Allocator,
 
     pub fn render(self: *AsciiWriter, data: [][]const []const u8) ![]const u8 {
-        // find max_width per_column
         var widths = try self.make_columns_widths(data);
-        defer widths.deinit();
+        defer widths.map.deinit();
+
+        var buf = std.ArrayList(u8).init(self.allocator);
+        var w = buf.writer();
 
         for (data) |row| {
-            for (row) |col| {
-                std.debug.print("{s} |", .{col});
+            for (row, 0..) |col, i| {
+                var col_max_w = widths.map.get(i) orelse col.len;
+                var v = try self.right_pad(col, col_max_w);
+
+                var sep = if (i == 0) "| " else " | ";
+                try w.print("{s}", .{sep});
+
+                try w.print("{s}", .{v});
+                self.allocator.free(v);
             }
-            std.debug.print("\n", .{});
+            try w.print(" |\n", .{});
         }
-        return "ok";
+
+        return buf.toOwnedSlice();
     }
 
-    /// find max width per column
     /// TODO: use fixed width array
-    fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !std.AutoHashMap(usize, usize) {
+    fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !struct { total_width: usize, map: std.AutoHashMap(usize, usize) } {
         var cols_widths = std.AutoHashMap(usize, usize).init(self.allocator);
+        var total_width: usize = 0;
 
         for (data) |row| {
             for (row, 0..) |col, i| {
@@ -36,7 +46,15 @@ pub const AsciiWriter = struct {
             }
         }
 
-        return cols_widths;
+        var it = cols_widths.iterator();
+        while (it.next()) |kv| {
+            total_width += kv.value_ptr.*;
+        }
+
+        return .{
+            .total_width = total_width,
+            .map = cols_widths,
+        };
     }
 
     pub fn right_pad(self: *AsciiWriter, str: []const u8, width: usize) ![]u8 {
@@ -49,7 +67,7 @@ pub const AsciiWriter = struct {
 
         var i: usize = width;
         while (i > str.len) : (i -= 1) {
-            buf[i - 1] = '_';
+            buf[i - 1] = ' ';
         }
 
         return buf;
@@ -68,6 +86,8 @@ pub fn init(allocator: Allocator) !*AsciiWriter {
     return self;
 }
 
+///////////////////////////////////////////////////////////////////////////
+
 test "render" {
     var app = try init(std.testing.allocator);
     defer app.deinit();
@@ -75,18 +95,21 @@ test "render" {
     var rows = std.ArrayList([]const []const u8).init(app.allocator);
     defer rows.deinit();
 
-    var v = [_][]const u8{ "Hello", "World" };
+    const v = [_][]const u8{ "Hello", "World" };
     try rows.append(&v);
-    v = [_][]const u8{ "Hello", "Zig" };
-    try rows.append(&v);
+    const v2 = [_][]const u8{ "Hello", "Zig" };
+    try rows.append(&v2);
+
     const result = try app.render(rows.items);
 
     const expected =
         \\| Hello | World |
         \\| Hello | Zig   |
+        \\
     ;
 
-    try testing.expectEqualStrings(result, expected);
+    try testing.expectEqualStrings(expected, result);
+    app.allocator.free(result);
 }
 
 test "right pad" {
@@ -95,7 +118,7 @@ test "right pad" {
 
     var msg = "hello";
     var r = try app.right_pad(msg, 8);
-    try testing.expectEqualStrings("hello___", r);
+    try testing.expectEqualStrings("hello   ", r);
     app.allocator.free(r);
 
     msg = "hello";
