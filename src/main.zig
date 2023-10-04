@@ -58,7 +58,7 @@ pub const AsciiWriter = struct {
         };
     }
 
-    pub fn right_pad(self: *AsciiWriter, str: []const u8, width: usize) ![]u8 {
+    fn right_pad(self: *AsciiWriter, str: []const u8, width: usize) ![]u8 {
         if (str.len >= width) {
             return self.allocator.dupe(u8, str);
         }
@@ -72,6 +72,15 @@ pub const AsciiWriter = struct {
         }
 
         return buf;
+    }
+
+    fn str_repeat(self: *AsciiWriter, char: u8, len: usize) ![]u8 {
+        var str = try self.allocator.alloc(u8, len);
+        var i: usize = 0;
+        while (i <= len-1) : (i += 1) {
+            str[i] = char;
+        }
+        return str;
     }
 
     pub fn deinit(self: *AsciiWriter) void {
@@ -105,10 +114,8 @@ test "render" {
     defer app.allocator.free(result);
 
     const expected =
-        \\+-------+-------+
         \\| Hello | World |
         \\| Hello | Zig   |
-        \\+-------+-------+
         \\
     ;
 
@@ -128,4 +135,16 @@ test "right pad" {
     r = try app.right_pad(msg, 4);
     try testing.expectEqualStrings("hello", r);
     app.allocator.free(r);
+}
+
+test "str_repeat" {
+    var app = try init(std.testing.allocator);
+    defer app.deinit();
+
+    var r = try app.str_repeat('-', 5);
+    defer app.allocator.free(r);
+
+    r[1] = '+';
+
+    try testing.expectEqualStrings("-+---", r);
 }
