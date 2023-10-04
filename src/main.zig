@@ -13,14 +13,15 @@ pub const AsciiWriter = struct {
         var w = buf.writer();
 
         for (data) |row| {
+            // try w.print("{s}", .{sep_line});
             for (row, 0..) |col, i| {
                 var col_max_w = widths.map.get(i) orelse col.len;
                 var v = try self.right_pad(col, col_max_w);
 
                 var sep = if (i == 0) "| " else " | ";
                 try w.print("{s}", .{sep});
-
                 try w.print("{s}", .{v});
+
                 self.allocator.free(v);
             }
             try w.print(" |\n", .{});
@@ -101,15 +102,17 @@ test "render" {
     try rows.append(&v2);
 
     const result = try app.render(rows.items);
+    defer app.allocator.free(result);
 
     const expected =
+        \\+-------+-------+
         \\| Hello | World |
         \\| Hello | Zig   |
+        \\+-------+-------+
         \\
     ;
 
     try testing.expectEqualStrings(expected, result);
-    app.allocator.free(result);
 }
 
 test "right pad" {
