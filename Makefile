@@ -1,8 +1,4 @@
-.PHONY:run build
-.SILENT:build
-
-build:
-	@$(MAKE) -C ./build
+.PHONY:run
 
 run:
 	@zig build test
