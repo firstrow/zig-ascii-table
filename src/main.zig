@@ -12,13 +12,22 @@ pub const AsciiWriter = struct {
         var buf = std.ArrayList(u8).init(self.allocator);
         var w = buf.writer();
 
+        const table_width = widths.total_width + (3 * data[0].len) + 1;
+        const sep_line = try self.str_repeat('-', table_width);
         for (data) |row| {
-            // try w.print("{s}", .{sep_line});
+            var pos: usize = 0;
+            try w.print("{s}\n", .{sep_line});
             for (row, 0..) |col, i| {
-                var col_max_w = widths.map.get(i) orelse col.len;
-                var v = try self.right_pad(col, col_max_w);
+                var col_max_width = widths.map.get(i) orelse col.len;
+                var v = try self.right_pad(col, col_max_width);
 
                 var sep = if (i == 0) "| " else " | ";
+
+                pos += col_max_width + sep.len;
+                if (pos < sep_line.len) {
+                    sep_line[pos + 1] = '+';
+                }
+
                 try w.print("{s}", .{sep});
                 try w.print("{s}", .{v});
 
@@ -26,6 +35,8 @@ pub const AsciiWriter = struct {
             }
             try w.print(" |\n", .{});
         }
+        try w.print("{s}\n", .{sep_line});
+        self.allocator.free(sep_line);
 
         return buf.toOwnedSlice();
     }
@@ -77,9 +88,13 @@ pub const AsciiWriter = struct {
     fn str_repeat(self: *AsciiWriter, char: u8, len: usize) ![]u8 {
         var str = try self.allocator.alloc(u8, len);
         var i: usize = 0;
-        while (i <= len-1) : (i += 1) {
+        while (i <= len - 1) : (i += 1) {
             str[i] = char;
         }
+
+        str[0] = '+';
+        str[len - 1] = '+';
+
         return str;
     }
 
@@ -105,17 +120,18 @@ test "render" {
     var rows = std.ArrayList([]const []const u8).init(app.allocator);
     defer rows.deinit();
 
-    const v = [_][]const u8{ "Hello", "World" };
-    try rows.append(&v);
-    const v2 = [_][]const u8{ "Hello", "Zig" };
-    try rows.append(&v2);
+    try rows.append(&[_][]const u8{ "Hello", "World" });
+    try rows.append(&[_][]const u8{ "Hello", "Zig" });
 
     const result = try app.render(rows.items);
     defer app.allocator.free(result);
 
     const expected =
+        \\+-------+-------+
         \\| Hello | World |
+        \\+-------+-------+
         \\| Hello | Zig   |
+        \\+-------+-------+
         \\
     ;
 
@@ -144,7 +160,5 @@ test "str_repeat" {
     var r = try app.str_repeat('-', 5);
     defer app.allocator.free(r);
 
-    r[1] = '+';
-
-    try testing.expectEqualStrings("-+---", r);
+    try testing.expectEqualStrings("+---+", r);
 }
