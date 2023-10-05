@@ -14,23 +14,27 @@ pub const AsciiWriter = struct {
 
         const table_width = widths.total_width + (3 * data[0].len) + 1;
         const sep_line = try self.str_repeat('-', table_width);
+
+        // pre-render sep-line
+        var pos: usize = 0;
+        for (data[0][0..1], 0..) |col, i| {
+            var col_max_width = widths.map.get(i) orelse col.len;
+            var sep_len: u8 = 0;
+            if (i == 0) sep_len = 2 else sep_len = 3;
+            pos += col_max_width + sep_len;
+            if (pos < sep_line.len) {
+                sep_line[pos + 1] = '+';
+            }
+        }
+
         for (data) |row| {
-            var pos: usize = 0;
             try w.print("{s}\n", .{sep_line});
             for (row, 0..) |col, i| {
                 var col_max_width = widths.map.get(i) orelse col.len;
                 var v = try self.right_pad(col, col_max_width);
-
                 var sep = if (i == 0) "| " else " | ";
-
-                pos += col_max_width + sep.len;
-                if (pos < sep_line.len) {
-                    sep_line[pos + 1] = '+';
-                }
-
                 try w.print("{s}", .{sep});
                 try w.print("{s}", .{v});
-
                 self.allocator.free(v);
             }
             try w.print(" |\n", .{});
@@ -117,7 +121,7 @@ test "render" {
     var app = try init(std.testing.allocator);
     defer app.deinit();
 
-    var rows = std.ArrayList([]const []const u8).init(app.allocator);
+    var rows = try std.ArrayList([]const []const u8).initCapacity(app.allocator, 2);
     defer rows.deinit();
 
     try rows.append(&[_][]const u8{ "Hello", "World" });
