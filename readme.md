@@ -33,7 +33,7 @@ test "render" {
 
 ## TODO
 - [x] Render array of strings.
-- [ ] UTF-8 support.
+- [x] UTF support.
 - [ ] Render array of structs.
 - [ ] Limit table max. width.
 - [ ] Headers.

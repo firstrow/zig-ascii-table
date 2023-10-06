@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const utflen = std.unicode.calcUtf16LeLen;
 
 pub const AsciiWriter = struct {
     allocator: Allocator,
@@ -18,7 +19,7 @@ pub const AsciiWriter = struct {
         // pre-render sep-line
         var pos: usize = 0;
         for (data[0][0..1], 0..) |col, i| {
-            var col_max_width = widths.map.get(i) orelse col.len;
+            var col_max_width = widths.map.get(i) orelse try utflen(col);
             var sep_len: u8 = 0;
             if (i == 0) sep_len = 2 else sep_len = 3;
             pos += col_max_width + sep_len;
@@ -30,7 +31,7 @@ pub const AsciiWriter = struct {
         for (data) |row| {
             try w.print("{s}\n", .{sep_line});
             for (row, 0..) |col, i| {
-                var col_max_width = widths.map.get(i) orelse col.len;
+                var col_max_width = widths.map.get(i) orelse try utflen(col);
                 var v = try self.right_pad(col, col_max_width);
                 var sep = if (i == 0) "| " else " | ";
                 try w.print("{s}", .{sep});
@@ -53,11 +54,12 @@ pub const AsciiWriter = struct {
         for (data) |row| {
             for (row, 0..) |col, i| {
                 var max_width = try cols_widths.getOrPut(i);
+                var len = try utflen(col);
                 if (!max_width.found_existing) {
                     max_width.value_ptr.* = 0;
                 }
-                if (col.len > max_width.value_ptr.*) {
-                    max_width.value_ptr.* = col.len;
+                if (len > max_width.value_ptr.*) {
+                    max_width.value_ptr.* = len;
                 }
             }
         }
@@ -74,16 +76,20 @@ pub const AsciiWriter = struct {
     }
 
     fn right_pad(self: *AsciiWriter, str: []const u8, width: usize) ![]u8 {
-        if (str.len >= width) {
+        const numChars = try utflen(str);
+
+        if (numChars >= width) {
             return self.allocator.dupe(u8, str);
         }
 
-        const buf = try self.allocator.alloc(u8, width);
+        var remainder: i32 = @intCast(width - numChars);
+
+        const buf = try self.allocator.alloc(u8, str.len + @as(usize, @intCast(remainder)));
         std.mem.copy(u8, buf, str);
 
-        var i: usize = width;
-        while (i > str.len) : (i -= 1) {
-            buf[i - 1] = ' ';
+        var i: usize = 0;
+        while (i < remainder) : (i += 1) {
+            buf[str.len + i] = ' ';
         }
 
         return buf;
@@ -121,21 +127,28 @@ test "render" {
     var app = try init(std.testing.allocator);
     defer app.deinit();
 
-    var rows = try std.ArrayList([]const []const u8).initCapacity(app.allocator, 2);
+    var rows = try std.ArrayList([]const []const u8).initCapacity(app.allocator, 3);
     defer rows.deinit();
 
     try rows.append(&[_][]const u8{ "Hello", "World" });
+    try rows.append(&[_][]const u8{ "Привіт", "Світ" });
     try rows.append(&[_][]const u8{ "Hello", "Zig" });
+    try rows.append(&[_][]const u8{ "Hello",  "äåóö"});
+
 
     const result = try app.render(rows.items);
     defer app.allocator.free(result);
 
     const expected =
-        \\+-------+-------+
-        \\| Hello | World |
-        \\+-------+-------+
-        \\| Hello | Zig   |
-        \\+-------+-------+
+        \\+--------+-------+
+        \\| Hello  | World |
+        \\+--------+-------+
+        \\| Привіт | Світ  |
+        \\+--------+-------+
+        \\| Hello  | Zig   |
+        \\+--------+-------+
+        \\| Hello  | äåóö  |
+        \\+--------+-------+
         \\
     ;
 
