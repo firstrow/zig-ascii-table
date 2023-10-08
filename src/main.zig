@@ -9,12 +9,10 @@ pub const AsciiWriter = struct {
 
     pub fn render(self: *AsciiWriter, data: [][]const []const u8) ![]const u8 {
         var arena = std.heap.ArenaAllocator.init(self.allocator);
-        self.arena = arena.allocator();
         defer arena.deinit();
+        self.arena = arena.allocator();
 
         var widths = try self.make_columns_widths(data);
-        defer widths.map.deinit();
-
         var result = std.ArrayList(u8).init(self.allocator);
         var w = result.writer();
 
@@ -23,11 +21,10 @@ pub const AsciiWriter = struct {
 
         // pre-render sep-line
         var pos: usize = 0;
-        for (data[0][0..1], 0..) |col, i| {
-            var col_max_width = widths.map.get(i) orelse try utflen(col);
+        for (data[0][0..1], 0..) |_, i| {
             var sep_len: u8 = 0;
             if (i == 0) sep_len = 2 else sep_len = 3;
-            pos += col_max_width + sep_len;
+            pos += widths.map[i] + sep_len;
             if (pos < sep_line.len) {
                 sep_line[pos + 1] = '+';
             }
@@ -36,8 +33,7 @@ pub const AsciiWriter = struct {
         for (data) |row| {
             try w.print("{s}\n", .{sep_line});
             for (row, 0..) |col, i| {
-                var col_max_width = widths.map.get(i) orelse try utflen(col);
-                var v = try self.right_pad(col, col_max_width);
+                var v = try self.right_pad(col, widths.map[i]);
                 var sep = if (i == 0) "| " else " | ";
                 try w.print("{s}", .{sep});
                 try w.print("{s}", .{v});
@@ -50,26 +46,23 @@ pub const AsciiWriter = struct {
     }
 
     /// TODO: use fixed width array
-    fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !struct { total_width: usize, map: std.AutoHashMap(usize, usize) } {
-        var cols_widths = std.AutoHashMap(usize, usize).init(self.arena);
+    fn make_columns_widths(self: *AsciiWriter, data: [][]const []const u8) !struct { total_width: usize, map: []usize } {
+        var cols_widths = try self.arena.alloc(usize, data[0].len);
+        @memset(cols_widths, 0);
         var total_width: usize = 0;
 
         for (data) |row| {
             for (row, 0..) |col, i| {
-                var max_width = try cols_widths.getOrPut(i);
                 var len = try utflen(col);
-                if (!max_width.found_existing) {
-                    max_width.value_ptr.* = 0;
-                }
-                if (len > max_width.value_ptr.*) {
-                    max_width.value_ptr.* = len;
+                if (len > cols_widths[i]) {
+                    cols_widths[i] = len;
                 }
             }
         }
 
-        var it = cols_widths.iterator();
-        while (it.next()) |kv| {
-            total_width += kv.value_ptr.*;
+        var i: usize = 0;
+        while (i <= data[0].len - 1) : (i += 1) {
+            total_width += cols_widths[i];
         }
 
         return .{
@@ -117,7 +110,6 @@ pub fn init(allocator: Allocator) AsciiWriter {
         .allocator = allocator,
         .arena = undefined,
     };
-
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -130,7 +122,7 @@ test "render" {
     try rows.append(&[_][]const u8{ "Hello", "World" });
     try rows.append(&[_][]const u8{ "Привіт", "Світ" });
     try rows.append(&[_][]const u8{ "Hello", "Zig" });
-    try rows.append(&[_][]const u8{ "Hello",  "äåóö"});
+    try rows.append(&[_][]const u8{ "Hello", "äåóö" });
 
     const result = try app.render(rows.items);
     defer app.allocator.free(result);
